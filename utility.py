@@ -3,7 +3,7 @@
 
 import os
 import torch
-
+import yaml
 
 def save_model_wegights(model, current_epoch, save_path, loss, file_name=None, optimizer=None):
     """
@@ -55,3 +55,10 @@ def load_model(model: torch.nn.Module, weights_path, optimizer=None, log=True):
         print(f"checkpoint[loss]: {checkpoint['loss']}")
     
     return model, optimizer, checkpoint
+
+
+def load_config(config_file):
+    with open(config_file) as file:
+        config = yaml.safe_load(file)
+
+    return config
