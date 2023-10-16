@@ -54,4 +54,4 @@ def load_model(model: torch.nn.Module, weights_path, optimizer=None, log=True):
         print(f"checkpoint[epoch]: {checkpoint['epoch']}")
         print(f"checkpoint[loss]: {checkpoint['loss']}")
     
-    return model, optimizer
+    return model, optimizer, checkpoint
