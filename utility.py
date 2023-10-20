@@ -5,7 +5,7 @@ import os
 import torch
 import yaml
 
-def save_model_wegights(model, current_epoch, save_path, loss, file_name=None, optimizer=None):
+def save_model_weights(model, current_epoch, save_path, loss, file_name=None, optimizer=None):
     """
     모델을 재학습시킬 경우는 optimizer도 같이 저장시켜야 합니다.
     """
@@ -44,7 +44,8 @@ def load_model(model: torch.nn.Module, weights_path, optimizer=None, log=True):
     
     checkpoint = torch.load(weights_path)
     
-    # NOTE: GPU를 병렬로 사용한 경우 dictionary의 key이름앞에 'module.'이 붙어 load할 때 key값 매핑이 안되는 경우가 있다. strict=False는 그를 위함.
+    # NOTE: GPU를 병렬로 사용한 경우 dictionary의 key이름앞에 'module.'이 붙음
+    # load할 때 key값 매핑이 안되는 경우가 있다. strict=False는 그를 위함.
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     
     if optimizer:
