@@ -1,65 +1,82 @@
-# NOTE: 함수 모듈을 불러오는 식으로 우선 구현. 필요 시 클래스로 확장 예정
-# TODO: 모델 학습 매개변수 저장도 필요하면 할 수 있도록 구현
-
 import os
+import random
+import argparse
+import logging
+from pathlib import Path
+
 import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import transforms
+import numpy as np
 import yaml
 
-def save_model_weights(model, current_epoch, save_path, loss, file_name=None, optimizer=None):
+
+def load_config(yaml_path):
     """
-    모델을 재학습시킬 경우는 optimizer도 같이 저장시켜야 합니다.
+    yaml 파일을 읽어서 dictionary 형태로 반환합니다.
     """
+    with open(yaml_path, 'r') as f:
+        data = yaml.safe_load(f)
     
-    if not os.path.exists(save_path):
-        os.makedirs(save_path, exist_ok=True)
-    
-    checkpoint = {
-        'epoch': current_epoch,
-        'model_state_dict': model.state_dict(),
-        'loss': loss
-    }
-    
-    if optimizer:
-        checkpoint['optimizer_state_dict'] = optimizer.state_dict()
-        file_name = file_name if file_name else f"{current_epoch}_epoch_model_opt.pth"
-    else:
-        file_name = file_name if file_name else f"{current_epoch}_epoch_model.pth"
-    
-    file_path = os.path.join(save_path, file_name)
-    
-
-    # 이미 파일이 있는 경우, 한 번은 다른 이름으로 다시 저장합니다.
-    if not os.path.exists(file_path):
-        torch.save(checkpoint, file_path)
-    else:
-        print(f"{file_path}는 이미 파일이 존재합니다. 다른 이름으로 저장합니다.")
-        file_name = f"{current_epoch}_epoch_duplicate_model.pth"
-        torch.save(checkpoint, os.path.join(save_path, file_name))
+    return data
 
 
-def load_model(model: torch.nn.Module, weights_path, optimizer=None, log=True):
+def save_model(net, states, save_path):
     """
-    log = True로 설정하면 해당 함수 내부의 출력문을 사용.
+    학습한 모델의 가중치를 저장합니다. 
     """
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path))
     
-    checkpoint = torch.load(weights_path)
-    
-    # NOTE: GPU를 병렬로 사용한 경우 dictionary의 key이름앞에 'module.'이 붙음
-    # load할 때 key값 매핑이 안되는 경우가 있다. strict=False는 그를 위함.
-    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-    
-    if optimizer:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    
-    if log:
-        print(f"checkpoint[epoch]: {checkpoint['epoch']}")
-        print(f"checkpoint[loss]: {checkpoint['loss']}")
-    
-    return model, optimizer, checkpoint
+    # GPU를 병렬로 사용하는 경우, 모델을 저장할 때 module을 붙여주어 저장.
+    if isinstance(net, nn.DataParallel) or isinstance(net, nn.parallel.DistributedDataParallel):
+        states['model_state'] = net.module.state_dict()
+        torch.save(states, save_path)
+    else:    
+        torch.save(states, save_path)
 
 
-def load_config(config_file):
-    with open(config_file) as file:
-        config = yaml.safe_load(file)
+def dict2namespace(config):
+    """ 
+    dictionary를 namespace로 변환 
+    """
+    namespace = argparse.Namespace()
+    for key, value in config.items():
+        if isinstance(value, dict):
+            new_value = dict2namespace(value)
+        else:
+            new_value = value
+        setattr(namespace, key, new_value)
+    
+    return namespace
 
-    return config
+
+def set_seed(seed=990912):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def set_logger(cfg):
+    log_path = os.path.join(cfg.paths.exp_path, cfg.paths.log_dir)
+    
+    log_folder = Path(log_path)
+    log_folder.mkdir(parents=True, exist_ok=True)
+    
+    stream_handler = logging.StreamHandler()
+    file_handler = logging.FileHandler(os.path.join(log_path, "stdout.txt"))
+    
+    formatter = logging.Formatter(
+            "%(levelname)s - %(filename)s - %(asctime)s - %(message)s"
+        )
+    stream_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    
+    logger = logging.getLogger()
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
+    logger.setLevel(cfg.log.verbose.upper())
